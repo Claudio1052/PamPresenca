@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioCheck — Check-in Biométrico</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<!-- Supabase JS SDK v2 (CDN — funciona no GitHub Pages sem build) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg:#0a0c0f; --surface:#111418; --surface2:#181c22; --border:#252a32;
+    --accent:#00e5a0; --warn:#f59e0b; --danger:#ef4444;
+    --text:#e8edf5; --muted:#5a6478;
+    --mono:'DM Mono',monospace; --sans:'Syne',sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;
+    display:flex;flex-direction:column;align-items:center;padding:24px 16px 48px;
+    background-image:
+      radial-gradient(ellipse 80% 60% at 50% -10%,rgba(0,229,160,.07) 0%,transparent 70%),
+      repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(255,255,255,.018) 40px),
+      repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(255,255,255,.018) 40px);}
+  header{width:100%;max-width:680px;display:flex;align-items:center;justify-content:space-between;
+    padding:0 0 32px;border-bottom:1px solid var(--border);margin-bottom:40px;}
+  .logo{font-weight:800;font-size:1.4rem;letter-spacing:-.04em;display:flex;align-items:center;gap:10px}
+  .logo-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);
+    box-shadow:0 0 12px var(--accent);animation:pulse 2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(1.3)}}
+  .event-badge{font-family:var(--mono);font-size:.7rem;background:var(--surface2);
+    border:1px solid var(--border);color:var(--muted);padding:5px 12px;border-radius:100px;letter-spacing:.05em}
+  .card{width:100%;max-width:680px;background:var(--surface);border:1px solid var(--border);border-radius:20px;overflow:hidden}
+  .card-header{padding:28px 32px 24px;border-bottom:1px solid var(--border);
+    display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+  .card-title{font-size:1.25rem;font-weight:700;letter-spacing:-.03em}
+  .card-sub{font-size:.82rem;color:var(--muted);margin-top:4px;font-family:var(--mono)}
+  .status-badge{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:100px;
+    font-family:var(--mono);font-size:.72rem;font-weight:500;border:1px solid;white-space:nowrap;transition:all .4s}
+  .status-badge.idle{background:rgba(90,100,120,.12);border-color:var(--border);color:var(--muted)}
+  .status-badge.waiting{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.4);color:var(--warn);animation:blink .9s infinite}
+  .status-badge.success{background:rgba(0,229,160,.12);border-color:rgba(0,229,160,.4);color:var(--accent)}
+  .status-badge.error{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3);color:var(--danger)}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.5}}
+  .status-dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+  .card-body{padding:32px;display:flex;flex-direction:column;gap:20px}
+  .field{display:flex;flex-direction:column;gap:8px}
+  label{font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  input[type="text"],input[type="email"]{background:var(--surface2);border:1px solid var(--border);
+    color:var(--text);font-family:var(--mono);font-size:.9rem;padding:14px 16px;
+    border-radius:10px;outline:none;transition:border-color .2s,box-shadow .2s;width:100%}
+  input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,229,160,.1)}
+  input::placeholder{color:var(--muted)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:500px){.row{grid-template-columns:1fr}}
+  .sep{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:.7rem;color:var(--muted)}
+  .sep::before,.sep::after{content:'';flex:1;height:1px;background:var(--border)}
+  .bio-btn{position:relative;background:linear-gradient(135deg,#00e5a0 0%,#00b87a 100%);
+    color:#0a0c0f;font-family:var(--sans);font-weight:700;font-size:1rem;letter-spacing:-.02em;
+    border:none;border-radius:12px;padding:18px 32px;cursor:pointer;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;gap:12px;
+    transition:transform .15s,box-shadow .2s;box-shadow:0 4px 24px rgba(0,229,160,.25)}
+  .bio-btn:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,229,160,.35)}
+  .bio-btn:active{transform:translateY(0)}
+  .bio-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+  .bio-btn .ripple{position:absolute;border-radius:50%;background:rgba(255,255,255,.3);
+    transform:scale(0);animation:ripple .6s linear;pointer-events:none}
+  @keyframes ripple{to{transform:scale(4);opacity:0}}
+  .verify-btn{background:transparent;border:1px solid var(--border);color:var(--text);
+    font-family:var(--sans);font-weight:600;font-size:.9rem;border-radius:12px;
+    padding:14px 24px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;
+    transition:border-color .2s,background .2s}
+  .verify-btn:hover{border-color:var(--accent);background:rgba(0,229,160,.05)}
+  .verify-btn:disabled{opacity:.4;cursor:not-allowed}
+  .info-box{background:var(--surface2);border:1px solid var(--border);border-radius:12px;
+    padding:16px 20px;font-family:var(--mono);font-size:.78rem;color:var(--muted);line-height:1.6}
+  .info-box strong{color:var(--accent)}
+  .cred-card{background:rgba(0,229,160,.05);border:1px solid rgba(0,229,160,.2);
+    border-radius:12px;padding:16px 20px;display:none;font-family:var(--mono);font-size:.75rem;line-height:1.8}
+  .cred-card.show{display:block}
+  .cred-row{display:flex;justify-content:space-between;gap:8px}
+  .cred-key{color:var(--muted)}
+  .cred-val{color:var(--accent);word-break:break-all;text-align:right;max-width:60%}
+  /* Config panel */
+  .config-panel{background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.3);
+    border-radius:14px;padding:22px;display:flex;flex-direction:column;gap:14px}
+  .config-panel h4{font-size:.78rem;letter-spacing:.07em;text-transform:uppercase;color:var(--warn)}
+  .config-panel p{font-family:var(--mono);font-size:.72rem;color:var(--muted);line-height:1.7}
+  .config-panel p a{color:var(--warn);text-decoration:none}
+  .config-panel input{font-size:.82rem}
+  .btn-connect{background:var(--warn);color:#0a0c0f;border:none;border-radius:8px;
+    padding:11px 22px;font-family:var(--sans);font-weight:700;font-size:.83rem;cursor:pointer;transition:opacity .2s}
+  .btn-connect:hover{opacity:.85}
+  .sb-connected{font-family:var(--mono);font-size:.72rem;color:var(--accent);
+    display:flex;align-items:center;gap:6px;padding:8px 14px;
+    background:rgba(0,229,160,.08);border:1px solid rgba(0,229,160,.2);border-radius:8px}
+  footer{margin-top:32px;font-family:var(--mono);font-size:.7rem;color:var(--muted);text-align:center;line-height:1.8}
+  footer a{color:var(--accent);text-decoration:none}
+  #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);
+    background:var(--surface2);border:1px solid var(--border);color:var(--text);
+    font-family:var(--mono);font-size:.82rem;padding:12px 24px;border-radius:100px;
+    transition:transform .3s cubic-bezier(.34,1.56,.64,1);z-index:99;pointer-events:none;white-space:nowrap}
+  #toast.show{transform:translateX(-50%) translateY(0)}
+  #toast.success{border-color:rgba(0,229,160,.4);color:var(--accent)}
+  #toast.error{border-color:rgba(239,68,68,.4);color:var(--danger)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span class="logo-dot"></span>BioCheck</div>
+  <div class="event-badge">TREINAMENTO / 2026</div>
+</header>
+
+<div class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">Registro de Presença</div>
+      <div class="card-sub">// Supabase · WebAuthn FIDO2 · GitHub Pages</div>
+    </div>
+    <div class="status-badge idle" id="statusBadge">
+      <span class="status-dot"></span>
+      <span id="statusText">Aguardando</span>
+    </div>
+  </div>
+
+  <div class="card-body">
+
+    <!-- ── Painel de configuração Supabase ── -->
+    <div class="config-panel" id="configPanel">
+      <h4>⚙️ Conectar ao Supabase</h4>
+      <p>Encontre as credenciais em <a href="https://supabase.com/dashboard" target="_blank">supabase.com/dashboard</a>
+        → seu projeto → <strong>Settings → API</strong>.</p>
+      <div class="field">
+        <label>Project URL</label>
+        <input type="text" id="cfgUrl" placeholder="https://abcdefgh.supabase.co">
+      </div>
+      <div class="field">
+        <label>Anon / Public Key</label>
+        <input type="text" id="cfgKey" placeholder="eyJhbGciOiJIUzI1NiIs…">
+      </div>
+      <button class="btn-connect" onclick="saveConfig()">Conectar →</button>
+    </div>
+
+    <!-- Indicador "conectado" (exibido após config) -->
+    <div class="sb-connected" id="sbConnected" style="display:none">
+      <span style="width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block"></span>
+      Supabase conectado &nbsp;·&nbsp; <span id="sbUrl" style="opacity:.6"></span>
+      &nbsp;<button onclick="resetConfig()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:.7rem">trocar</button>
+    </div>
+
+    <!-- Formulário participante -->
+    <div class="row">
+      <div class="field">
+        <label>Nome Completo</label>
+        <input type="text" id="nome" placeholder="Ex: Ana Lima" autocomplete="name">
+      </div>
+      <div class="field">
+        <label>Cargo / Função</label>
+        <input type="text" id="cargo" placeholder="Ex: Analista SR">
+      </div>
+    </div>
+    <div class="field">
+      <label>E-mail Corporativo</label>
+      <input type="email" id="email" placeholder="ana.lima@empresa.com" autocomplete="email">
+    </div>
+
+    <div class="sep">prosseguir com biometria</div>
+
+    <button class="bio-btn" id="btnRegister" onclick="handleRegister(event)">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" opacity=".25"/>
+        <path d="M8.5 8.5c1-1 2.3-1.5 3.5-1.5s2.5.5 3.5 1.5"/>
+        <path d="M7 11c.3-1.5 1-2.8 2-3.7M17 11c-.3-1.5-1-2.8-2-3.7"/>
+        <path d="M12 10c-1.1 0-2 .9-2 2v4M14 12c0-1.1-.9-2-2-2"/>
+        <path d="M9 15c.5 1 1.5 2 3 2s2.5-1 3-2"/>
+      </svg>
+      Registrar Biometria
+    </button>
+
+    <button class="verify-btn" id="btnVerify" onclick="handleVerify(event)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/>
+      </svg>
+      Verificar Presença (já cadastrado)
+    </button>
+
+    <div class="cred-card" id="credCard">
+      <div class="cred-row"><span class="cred-key">credential_id</span><span class="cred-val" id="credId">—</span></div>
+      <div class="cred-row"><span class="cred-key">supabase_id</span><span class="cred-val" id="credPk">—</span></div>
+      <div class="cred-row"><span class="cred-key">timestamp</span><span class="cred-val" id="credTs">—</span></div>
+      <div class="cred-row"><span class="cred-key">backend</span><span class="cred-val" style="color:var(--accent)">SUPABASE POSTGRES</span></div>
+    </div>
+
+    <div class="info-box">
+      <strong>WebAuthn + Supabase</strong> — A chave privada <em>nunca sai do dispositivo</em>.
+      Apenas a <strong>chave pública</strong> é gravada no Postgres via API REST segura do Supabase.
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  Hospedado no <a href="https://pages.github.com" target="_blank">GitHub Pages</a>
+  · Backend <a href="https://supabase.com" target="_blank">Supabase</a>
+  · <a href="admin.html">Painel Admin →</a>
+</footer>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════
+// SUPABASE — CONFIGURAÇÃO E INICIALIZAÇÃO
+// ══════════════════════════════════════════════════════
+
+// Alternativa hardcode (descomente se preferir não usar o painel de config):
+// const SUPABASE_URL = 'https://SEU-PROJETO.supabase.co';
+// const SUPABASE_ANON_KEY = 'sua-anon-key';
+
+let sb = null;  // cliente Supabase global
+
+function initSupabase() {
+  const url = localStorage.getItem('sb_url');
+  const key = localStorage.getItem('sb_key');
+  if (url && key) {
+    sb = window.supabase.createClient(url, key);
+    document.getElementById('configPanel').style.display = 'none';
+    document.getElementById('sbConnected').style.display = 'flex';
+    document.getElementById('sbUrl').textContent = new URL(url).hostname;
+    return true;
+  }
+  return false;
+}
+
+function saveConfig() {
+  const url = document.getElementById('cfgUrl').value.trim().replace(/\/$/, '');
+  const key = document.getElementById('cfgKey').value.trim();
+  if (!url.startsWith('https://') || !key) {
+    toast('URL deve começar com https:// e key não pode estar vazia.', 'error');
+    return;
+  }
+  localStorage.setItem('sb_url', url);
+  localStorage.setItem('sb_key', key);
+  sb = window.supabase.createClient(url, key);
+  document.getElementById('configPanel').style.display = 'none';
+  document.getElementById('sbConnected').style.display = 'flex';
+  document.getElementById('sbUrl').textContent = new URL(url).hostname;
+  toast('✓ Supabase conectado!', 'success');
+}
+
+function resetConfig() {
+  localStorage.removeItem('sb_url');
+  localStorage.removeItem('sb_key');
+  sb = null;
+  document.getElementById('configPanel').style.display = 'flex';
+  document.getElementById('sbConnected').style.display = 'none';
+  document.getElementById('cfgUrl').value = '';
+  document.getElementById('cfgKey').value = '';
+}
+
+// ══════════════════════════════════════════════════════
+// UTILITÁRIOS WebAuthn
+// ══════════════════════════════════════════════════════
+
+const bufToB64url = buf => {
+  const b = new Uint8Array(buf);
+  let s = ''; b.forEach(x => s += String.fromCharCode(x));
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+};
+
+const b64urlToBuf = b64 => {
+  b64 = b64.replace(/-/g,'+').replace(/_/g,'/');
+  while (b64.length%4) b64+='=';
+  const bin = atob(b64), buf = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i);
+  return buf;
+};
+
+// ══════════════════════════════════════════════════════
+// HELPERS UI
+// ══════════════════════════════════════════════════════
+
+const setStatus = (type, text) => {
+  document.getElementById('statusBadge').className = 'status-badge ' + type;
+  document.getElementById('statusText').textContent = text;
+};
+
+const setBtns = d => {
+  document.getElementById('btnRegister').disabled = d;
+  document.getElementById('btnVerify').disabled = d;
+};
+
+const toast = (msg, type='') => {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'show ' + type;
+  setTimeout(()=>el.className='', 3500);
+};
+
+function getForm() {
+  const nome  = document.getElementById('nome').value.trim();
+  const cargo = document.getElementById('cargo').value.trim();
+  const email = document.getElementById('email').value.trim();
+  if (!nome || !cargo || !email) { toast('Preencha Nome, E-mail e Cargo.','error'); return null; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('E-mail inválido.','error'); return null; }
+  return { nome, cargo, email };
+}
+
+function showCred(credId, rowId, ts) {
+  document.getElementById('credCard').classList.add('show');
+  document.getElementById('credId').textContent = String(credId).slice(0,22)+'…';
+  document.getElementById('credPk').textContent = 'id: ' + rowId;
+  document.getElementById('credTs').textContent = new Date(ts).toLocaleString('pt-BR');
+}
+
+// ══════════════════════════════════════════════════════
+// ETAPA 2A — REGISTRO
+// WebAuthn navigator.credentials.create() → Supabase INSERT
+// ══════════════════════════════════════════════════════
+async function handleRegister(evt) {
+  // Efeito ripple
+  const btn = evt.currentTarget;
+  const ripple = document.createElement('span'); ripple.className='ripple';
+  const r = btn.getBoundingClientRect(), sz = Math.max(r.width,r.height);
+  ripple.style.cssText=`width:${sz}px;height:${sz}px;left:${evt.clientX-r.left-sz/2}px;top:${evt.clientY-r.top-sz/2}px`;
+  btn.appendChild(ripple); setTimeout(()=>ripple.remove(),700);
+
+  if (!sb) { toast('Configure o Supabase primeiro.','error'); return; }
+  const form = getForm(); if (!form) return;
+
+  setStatus('waiting','Aguardando sensor…'); setBtns(true);
+
+  try {
+    // 1. Challenge aleatório de 32 bytes (nunca reutilizado)
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+
+    // 2. PublicKeyCredentialCreationOptions — padrão W3C WebAuthn Level 2
+    const cred = await navigator.credentials.create({ publicKey: {
+      challenge,
+      rp: { name: 'BioCheck', id: window.location.hostname },
+      user: {
+        id: new TextEncoder().encode(form.email),  // user handle único
+        name: form.email,
+        displayName: form.nome,
+      },
+      pubKeyCredParams: [
+        { type: 'public-key', alg: -7   },   // ECDSA P-256 (ES256) — preferido
+        { type: 'public-key', alg: -257 },   // RSASSA-PKCS1-v1_5 (RS256) — fallback
+      ],
+      authenticatorSelection: {
+        userVerification: 'required',   // exige biometria, não só presença
+        residentKey: 'preferred',       // armazena no dispositivo se possível
+      },
+      timeout: 60000,
+      attestation: 'none',             // sem attestation = máxima privacidade
+    }});
+
+    const credentialId = bufToB64url(cred.rawId);
+    const publicKey    = bufToB64url(cred.response.attestationObject);
+    const clientData   = bufToB64url(cred.response.clientDataJSON);
+    const now          = new Date().toISOString();
+
+    // 3. Persiste no Supabase — tabela `participants`
+    //    upsert: atualiza se o e-mail já existir (re-registro)
+    const { data: row, error } = await sb
+      .from('participants')
+      .upsert({
+        nome:          form.nome,
+        cargo:         form.cargo,
+        email:         form.email,
+        credential_id: credentialId,
+        public_key:    publicKey,
+        client_data:   clientData,
+        registered_at: now,
+        presente:      false,
+        checkin_at:    null,
+      }, { onConflict: 'email' })
+      .select('id')
+      .single();
+
+    if (error) throw new Error('Supabase: ' + error.message);
+
+    // 4. Log de auditoria
+    await sb.from('auth_log').insert({
+      email: form.email, action: 'register',
+      credential_id: credentialId, ts: now,
+    }).then(()=>{});
+
+    setStatus('success', 'Registrado!');
+    showCred(credentialId, row.id, now);
+    toast('✓ Biometria salva no Supabase!', 'success');
+
+  } catch (err) {
+    console.error(err);
+    setStatus('error', 'Falha no registro');
+    toast(err.name==='NotAllowedError' ? 'Cancelado pelo usuário.' : err.message, 'error');
+  } finally { setBtns(false); }
+}
+
+// ══════════════════════════════════════════════════════
+// ETAPA 2B — VERIFICAÇÃO
+// Supabase SELECT credentialId → WebAuthn get() → Supabase UPDATE
+// ══════════════════════════════════════════════════════
+async function handleVerify(evt) {
+  if (!sb) { toast('Configure o Supabase primeiro.','error'); return; }
+  const form = getForm(); if (!form) return;
+
+  setStatus('waiting','Buscando credencial…'); setBtns(true);
+
+  try {
+    // 1. Busca credencial no Supabase pelo e-mail
+    const { data: participant, error: fetchErr } = await sb
+      .from('participants')
+      .select('id, credential_id, nome')
+      .eq('email', form.email)
+      .single();
+
+    if (fetchErr || !participant) {
+      throw new Error('Usuário não encontrado. Registre a biometria primeiro.');
+    }
+
+    setStatus('waiting','Aguardando sensor…');
+
+    // 2. Novo challenge por verificação (evita replay attacks)
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+
+    // 3. PublicKeyCredentialRequestOptions
+    const assertion = await navigator.credentials.get({ publicKey: {
+      challenge,
+      allowCredentials: [{
+        type: 'public-key',
+        id: b64urlToBuf(participant.credential_id),
+        transports: ['internal','hybrid'],  // internal = sensor embutido no device
+      }],
+      userVerification: 'required',
+      timeout: 60000,
+    }});
+
+    // 4. Valida tipo da resposta (segurança básica client-side)
+    const clientData = JSON.parse(new TextDecoder().decode(assertion.response.clientDataJSON));
+    if (clientData.type !== 'webauthn.get') throw new Error('Tipo de operação inválido.');
+
+    // 5. Registra check-in no Supabase com timestamp preciso
+    const checkinAt = new Date().toISOString();
+    const { error: upErr } = await sb
+      .from('participants')
+      .update({ presente: true, checkin_at: checkinAt })
+      .eq('email', form.email);
+
+    if (upErr) throw new Error('Supabase update: ' + upErr.message);
+
+    // 6. Log de auditoria
+    await sb.from('auth_log').insert({
+      email: form.email, action: 'verify_ok',
+      credential_id: bufToB64url(assertion.rawId), ts: checkinAt,
+    }).then(()=>{});
+
+    setStatus('success','Presença confirmada!');
+    showCred(bufToB64url(assertion.rawId), participant.id, checkinAt);
+    toast('✓ Check-in às ' + new Date(checkinAt).toLocaleTimeString('pt-BR'), 'success');
+
+  } catch (err) {
+    console.error(err);
+    setStatus('error','Verificação falhou');
+    if (sb && form) sb.from('auth_log').insert({ email: form.email, action:'verify_fail', ts: new Date().toISOString() }).then(()=>{});
+    toast(err.name==='NotAllowedError' ? 'Cancelado pelo usuário.' : err.message, 'error');
+  } finally { setBtns(false); }
+}
+
+// ── Init ──────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  initSupabase();
+  if (!window.PublicKeyCredential) {
+    setStatus('error','WebAuthn não suportado');
+    setBtns(true);
+    toast('Dispositivo não suporta WebAuthn / FIDO2.','error');
+  }
+});
+</script>
+</body>
+</html>

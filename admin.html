@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioCheck — Painel Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{--bg:#0a0c0f;--surface:#111418;--surface2:#181c22;--border:#252a32;--accent:#00e5a0;--warn:#f59e0b;--danger:#ef4444;--text:#e8edf5;--muted:#5a6478;--mono:'DM Mono',monospace;--sans:'Syne',sans-serif}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;padding:24px 20px 60px;
+    background-image:radial-gradient(ellipse 80% 50% at 50% -5%,rgba(0,229,160,.06) 0%,transparent 70%)}
+  .top-bar{max-width:1100px;margin:0 auto 36px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+  .logo{font-weight:800;font-size:1.3rem;letter-spacing:-.04em;display:flex;align-items:center;gap:8px}
+  .logo-dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+  .back-link{font-family:var(--mono);font-size:.75rem;color:var(--muted);text-decoration:none;display:flex;align-items:center;gap:6px}
+  .back-link:hover{color:var(--accent)}
+  /* Config panel */
+  .config-panel{max-width:1100px;margin:0 auto 28px;background:rgba(245,158,11,.06);
+    border:1px solid rgba(245,158,11,.3);border-radius:14px;padding:22px;display:flex;flex-direction:column;gap:14px}
+  .config-panel h4{font-size:.78rem;letter-spacing:.07em;text-transform:uppercase;color:var(--warn)}
+  .config-panel p{font-family:var(--mono);font-size:.72rem;color:var(--muted);line-height:1.7}
+  .config-panel p a{color:var(--warn);text-decoration:none}
+  .cfg-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:600px){.cfg-row{grid-template-columns:1fr}}
+  .field{display:flex;flex-direction:column;gap:7px}
+  label{font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  input[type="text"]{background:var(--surface2);border:1px solid var(--border);color:var(--text);
+    font-family:var(--mono);font-size:.85rem;padding:12px 14px;border-radius:9px;outline:none;
+    transition:border-color .2s;width:100%}
+  input:focus{border-color:var(--accent)}
+  input::placeholder{color:var(--muted)}
+  .btn-connect{background:var(--warn);color:#0a0c0f;border:none;border-radius:8px;padding:11px 22px;
+    font-family:var(--sans);font-weight:700;font-size:.83rem;cursor:pointer;width:fit-content}
+  .btn-connect:hover{opacity:.85}
+  .sb-bar{max-width:1100px;margin:0 auto 24px;display:flex;align-items:center;justify-content:space-between;
+    gap:10px;font-family:var(--mono);font-size:.72rem;
+    background:rgba(0,229,160,.06);border:1px solid rgba(0,229,160,.18);
+    border-radius:10px;padding:10px 16px}
+  .sb-bar span{color:var(--accent);display:flex;align-items:center;gap:6px}
+  .sb-bar button{background:none;border:none;color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:.7rem}
+  .sb-bar button:hover{color:var(--danger)}
+  /* Stats */
+  .stats-row{max-width:1100px;margin:0 auto 24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:18px 20px}
+  .stat-label{font-family:var(--mono);font-size:.67rem;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+  .stat-value{font-size:2.1rem;font-weight:800;letter-spacing:-.04em;margin-top:5px}
+  .stat-value.green{color:var(--accent)} .stat-value.warn{color:var(--warn)}
+  /* Toolbar */
+  .toolbar{max-width:1100px;margin:0 auto 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .search-wrap{flex:1;min-width:200px;position:relative}
+  .search-wrap input{padding:11px 14px 11px 40px;font-size:.85rem}
+  .search-icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+  .filter-select{background:var(--surface2);border:1px solid var(--border);color:var(--text);
+    font-family:var(--mono);font-size:.82rem;padding:11px 14px;border-radius:10px;outline:none;cursor:pointer}
+  .btn-export{background:linear-gradient(135deg,#00e5a0,#00b87a);color:#0a0c0f;font-family:var(--sans);
+    font-weight:700;font-size:.85rem;border:none;border-radius:10px;padding:11px 20px;
+    cursor:pointer;display:flex;align-items:center;gap:8px;
+    box-shadow:0 3px 16px rgba(0,229,160,.2);white-space:nowrap;transition:transform .15s,box-shadow .2s}
+  .btn-export:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(0,229,160,.3)}
+  .btn-refresh{background:var(--surface2);border:1px solid var(--border);color:var(--muted);
+    font-family:var(--mono);font-size:.75rem;padding:11px 16px;border-radius:10px;
+    cursor:pointer;transition:border-color .2s;white-space:nowrap}
+  .btn-refresh:hover{border-color:var(--accent);color:var(--accent)}
+  /* Table */
+  .table-wrap{max-width:1100px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+  table{width:100%;border-collapse:collapse}
+  thead tr{border-bottom:1px solid var(--border)}
+  th{font-family:var(--mono);font-size:.67rem;font-weight:500;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted);padding:13px 20px;text-align:left;white-space:nowrap}
+  th.sortable{cursor:pointer;user-select:none} th.sortable:hover{color:var(--text)}
+  td{padding:13px 20px;font-size:.88rem;border-bottom:1px solid rgba(37,42,50,.6);vertical-align:middle}
+  tr:last-child td{border-bottom:none} tr:hover td{background:rgba(255,255,255,.018)}
+  .td-name{font-weight:600} .td-email{font-family:var(--mono);font-size:.78rem;color:var(--muted)}
+  .td-time{font-family:var(--mono);font-size:.8rem}
+  .td-time.present{color:var(--accent)} .td-time.absent{color:var(--muted)}
+  .pill{display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:100px;
+    font-family:var(--mono);font-size:.7rem;font-weight:500;border:1px solid}
+  .pill.present{background:rgba(0,229,160,.1);border-color:rgba(0,229,160,.3);color:var(--accent)}
+  .pill.absent{background:rgba(90,100,120,.1);border-color:var(--border);color:var(--muted)}
+  .pill-dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+  .empty-state{padding:56px 20px;text-align:center;font-family:var(--mono);color:var(--muted);font-size:.85rem;line-height:2}
+  .empty-state strong{color:var(--text);font-family:var(--sans);font-size:1.05rem;display:block;margin-bottom:8px}
+  .loading{text-align:center;padding:40px;font-family:var(--mono);font-size:.8rem;color:var(--muted);animation:blink 1s infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+  #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);
+    background:var(--surface2);border:1px solid var(--border);color:var(--text);
+    font-family:var(--mono);font-size:.8rem;padding:10px 22px;border-radius:100px;
+    transition:transform .3s cubic-bezier(.34,1.56,.64,1);z-index:99;pointer-events:none;white-space:nowrap}
+  #toast.show{transform:translateX(-50%) translateY(0)}
+  #toast.success{border-color:rgba(0,229,160,.4);color:var(--accent)}
+  #toast.error{border-color:rgba(239,68,68,.4);color:var(--danger)}
+  @media(max-width:600px){th:nth-child(3),td:nth-child(3){display:none} th:nth-child(4),td:nth-child(4){display:none}}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+    <div class="logo"><span class="logo-dot"></span>BioCheck</div>
+    <a class="back-link" href="checkin.html">← Voltar ao Check-in</a>
+  </div>
+  <span style="font-family:var(--mono);font-size:.7rem;color:var(--muted)">PAINEL ADMINISTRATIVO</span>
+</div>
+
+<!-- Config Supabase -->
+<div class="config-panel" id="configPanel">
+  <h4>⚙️ Conectar ao Supabase</h4>
+  <p>Encontre em <a href="https://supabase.com/dashboard" target="_blank">supabase.com/dashboard</a> → seu projeto → <strong>Settings → API</strong>.</p>
+  <div class="cfg-row">
+    <div class="field"><label>Project URL</label><input type="text" id="cfgUrl" placeholder="https://xxxx.supabase.co"></div>
+    <div class="field"><label>Anon / Public Key</label><input type="text" id="cfgKey" placeholder="eyJhbGci…"></div>
+  </div>
+  <button class="btn-connect" onclick="saveConfig()">Conectar →</button>
+</div>
+
+<!-- Barra "conectado" -->
+<div class="sb-bar" id="sbBar" style="display:none">
+  <span><span style="width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block"></span>
+    Supabase: <strong id="sbHost"></strong></span>
+  <button onclick="resetConfig()">desconectar</button>
+</div>
+
+<!-- Stats -->
+<div class="stats-row">
+  <div class="stat-card"><div class="stat-label">Total Registrados</div><div class="stat-value" id="statTotal">—</div></div>
+  <div class="stat-card"><div class="stat-label">Presentes</div><div class="stat-value green" id="statPresent">—</div></div>
+  <div class="stat-card"><div class="stat-label">Pendentes</div><div class="stat-value warn" id="statPending">—</div></div>
+  <div class="stat-card"><div class="stat-label">Taxa de Presença</div><div class="stat-value green" id="statRate">—</div></div>
+</div>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="search-wrap">
+    <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+    </svg>
+    <input type="text" id="searchInput" placeholder="Filtrar por nome ou e-mail…" oninput="applyFilters()">
+  </div>
+  <select class="filter-select" id="filterStatus" onchange="applyFilters()">
+    <option value="">Todos os status</option>
+    <option value="present">Presentes</option>
+    <option value="absent">Pendentes</option>
+  </select>
+  <button class="btn-export" onclick="exportCSV()">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+    </svg>
+    Exportar CSV
+  </button>
+  <button class="btn-refresh" onclick="loadParticipants()">↻ Atualizar</button>
+</div>
+
+<!-- Tabela -->
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th class="sortable" onclick="sortBy('nome')">Nome ↕</th>
+        <th>Cargo</th>
+        <th>E-mail</th>
+        <th class="sortable" onclick="sortBy('checkin_at')">Check-in ↕</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+  <div id="tableLoading" class="loading">carregando…</div>
+  <div class="empty-state" id="emptyState" style="display:none">
+    <strong>Nenhum participante encontrado</strong>
+    Registre participantes via a página de check-in.
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════
+// ESTADO
+// ══════════════════════════════════════════════════════
+let sb = null;
+let allParticipants = [];
+let sortField = 'nome';
+let sortAsc = true;
+
+// ══════════════════════════════════════════════════════
+// SUPABASE
+// ══════════════════════════════════════════════════════
+function initSupabase() {
+  const url = localStorage.getItem('sb_url');
+  const key = localStorage.getItem('sb_key');
+  if (url && key) {
+    sb = window.supabase.createClient(url, key);
+    document.getElementById('configPanel').style.display = 'none';
+    document.getElementById('sbBar').style.display = 'flex';
+    document.getElementById('sbHost').textContent = new URL(url).hostname;
+    loadParticipants();
+    return true;
+  }
+  document.getElementById('tableLoading').style.display = 'none';
+  return false;
+}
+
+function saveConfig() {
+  const url = document.getElementById('cfgUrl').value.trim().replace(/\/$/, '');
+  const key = document.getElementById('cfgKey').value.trim();
+  if (!url.startsWith('https://') || !key) { toast('Preencha URL e Key.','error'); return; }
+  localStorage.setItem('sb_url', url);
+  localStorage.setItem('sb_key', key);
+  sb = window.supabase.createClient(url, key);
+  document.getElementById('configPanel').style.display = 'none';
+  document.getElementById('sbBar').style.display = 'flex';
+  document.getElementById('sbHost').textContent = new URL(url).hostname;
+  toast('✓ Supabase conectado!', 'success');
+  loadParticipants();
+}
+
+function resetConfig() {
+  localStorage.removeItem('sb_url'); localStorage.removeItem('sb_key'); sb = null;
+  document.getElementById('configPanel').style.display = 'flex';
+  document.getElementById('sbBar').style.display = 'none';
+  document.getElementById('cfgUrl').value = ''; document.getElementById('cfgKey').value = '';
+  allParticipants = []; renderTable();
+}
+
+// ══════════════════════════════════════════════════════
+// CARREGA DADOS DO SUPABASE (realtime-ready)
+// ══════════════════════════════════════════════════════
+async function loadParticipants() {
+  if (!sb) return;
+  document.getElementById('tableLoading').style.display = 'block';
+  document.getElementById('tableBody').innerHTML = '';
+  document.getElementById('emptyState').style.display = 'none';
+
+  const { data, error } = await sb
+    .from('participants')
+    .select('id, nome, cargo, email, presente, checkin_at, registered_at')
+    .order('nome', { ascending: true });
+
+  document.getElementById('tableLoading').style.display = 'none';
+
+  if (error) { toast('Erro ao carregar: ' + error.message, 'error'); return; }
+
+  allParticipants = data || [];
+  updateStats();
+  applyFilters();
+}
+
+// ══════════════════════════════════════════════════════
+// STATS
+// ══════════════════════════════════════════════════════
+function updateStats() {
+  const total   = allParticipants.length;
+  const present = allParticipants.filter(p => p.presente).length;
+  const rate    = total ? Math.round(present/total*100) : 0;
+  document.getElementById('statTotal').textContent   = total;
+  document.getElementById('statPresent').textContent = present;
+  document.getElementById('statPending').textContent = total - present;
+  document.getElementById('statRate').textContent    = rate + '%';
+}
+
+// ══════════════════════════════════════════════════════
+// ORDENAÇÃO
+// ══════════════════════════════════════════════════════
+function sortBy(field) {
+  sortAsc = sortField===field ? !sortAsc : true;
+  sortField = field;
+  applyFilters();
+}
+
+// ══════════════════════════════════════════════════════
+// FILTROS + RENDER
+// ══════════════════════════════════════════════════════
+function applyFilters() {
+  const q  = document.getElementById('searchInput').value.toLowerCase();
+  const st = document.getElementById('filterStatus').value;
+
+  let list = allParticipants.filter(p => {
+    const matchText = p.nome.toLowerCase().includes(q) || p.email.toLowerCase().includes(q);
+    const matchSt   = !st
+      || (st==='present' && p.presente)
+      || (st==='absent'  && !p.presente);
+    return matchText && matchSt;
+  });
+
+  list.sort((a,b) => {
+    let va = a[sortField]||'', vb = b[sortField]||'';
+    if (sortField==='checkin_at') {
+      va = va ? new Date(va) : new Date(0);
+      vb = vb ? new Date(vb) : new Date(0);
+    } else { va=va.toString().toLowerCase(); vb=vb.toString().toLowerCase(); }
+    if (va<vb) return sortAsc?-1:1;
+    if (va>vb) return sortAsc?1:-1;
+    return 0;
+  });
+
+  renderTable(list);
+}
+
+function renderTable(list) {
+  list = list ?? allParticipants;
+  const tbody = document.getElementById('tableBody');
+  const empty = document.getElementById('emptyState');
+
+  if (list.length===0) { tbody.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+
+  tbody.innerHTML = list.map(p => {
+    const ts = p.checkin_at
+      ? new Date(p.checkin_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
+      : '—';
+    return `<tr>
+      <td><div class="td-name">${esc(p.nome)}</div></td>
+      <td style="font-size:.82rem;color:var(--muted)">${esc(p.cargo)}</td>
+      <td><div class="td-email">${esc(p.email)}</div></td>
+      <td><div class="td-time ${p.presente?'present':'absent'}">${ts}</div></td>
+      <td><span class="pill ${p.presente?'present':'absent'}">
+        <span class="pill-dot"></span>${p.presente?'Presente':'Pendente'}
+      </span></td>
+    </tr>`;
+  }).join('');
+}
+
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+// ══════════════════════════════════════════════════════
+// EXPORTAR CSV (dados do Supabase)
+// ══════════════════════════════════════════════════════
+async function exportCSV() {
+  if (!sb) { toast('Conecte ao Supabase primeiro.','error'); return; }
+
+  toast('Buscando dados…');
+
+  const { data, error } = await sb
+    .from('participants')
+    .select('nome, cargo, email, presente, checkin_at')
+    .order('nome', { ascending: true });
+
+  if (error) { toast('Erro: ' + error.message, 'error'); return; }
+
+  const header = 'Nome,Cargo,E-mail,Status,Check-in (Data/Hora)';
+  const rows = data.map(r => [
+    `"${r.nome}"`, `"${r.cargo}"`, `"${r.email}"`,
+    r.presente ? 'Presente' : 'Pendente',
+    r.checkin_at ? `"${new Date(r.checkin_at).toLocaleString('pt-BR')}"` : '',
+  ].join(','));
+
+  const csv  = '\uFEFF' + [header, ...rows].join('\r\n');
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `biocheck_presenca_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('✓ CSV exportado!', 'success');
+}
+
+// ══════════════════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════════════════
+function toast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'show ' + type;
+  setTimeout(()=>el.className='', 3000);
+}
+
+// ── Init ──────────────────────────────────────
+initSupabase();
+// Atualiza automaticamente a cada 30s (polling leve)
+setInterval(() => { if (sb) loadParticipants(); }, 30000);
+</script>
+</body>
+</html>
